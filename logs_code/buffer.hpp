@@ -17,12 +17,10 @@ namespace xqlog{
             Json::Value root;
             xqlog::Util::JsonUtil::UnSerialize(content, &root); // 反序列化，把内容转成jaon value格式
 
-            buffer_size_g = root["buffer_size"].asInt();
+            buffer_size_g = root["buffer_size"].asInt64();
             buffer_.resize(buffer_size_g);//缓冲区基础容量
             threshold_g = root["threshold"].asInt64();// 倍数扩容阈值
-            linear_growth_g = root["linear_growth"].asInt();// 线性增长容量
-            cout<<"buffer_size_g:"<<buffer_size_g<<endl<<"threshold_g:"<<threshold_g<<endl
-                <<"linear_growth_g:"<<linear_growth_g<<endl;
+            linear_growth_g = root["linear_growth"].asInt64();// 线性增长容量
         }
 
         void Push(const char *data, size_t len)
@@ -89,7 +87,7 @@ namespace xqlog{
         }
 
     protected:
-        std::vector<char> buffer_; // 缓冲区,不是环形队列
+        std::vector<char> buffer_; // 缓冲区
         size_t write_pos_;         // 生产者此时的位置
         size_t read_pos_;          // 消费者此时的位置
         size_t buffer_size_g;      // 缓冲区基础容量

@@ -4,10 +4,6 @@ using std::cout;
 using std::endl;
 
 void test() {
-    // LOGDEBUGDEFAULT("测试日志-1");
-    // LOGINFODEFAULT("测试日志-2");
-    // LOGWARNDEFAULT("测试日志-3");
-    // LOGERRORDEFAULT("测试日志-4");
     int cur_size = 1;
     int cnt = 5;
     while (cur_size++ < 100) {
@@ -19,8 +15,10 @@ int main() {
     Glb->BuildLoggerFormatter("[%c][%p][%f-%l]%T%m%n");
     Glb->BuildLoggerName("asynclogger");
     Glb->BuildLoggerType(xqlog::LoggerType::ASYNCLOGGER);
-    Glb->BuildLoggerSink<xqlog::FileSink>("./logfile/logfile.log");
-    Glb->BuildLoggerSink<xqlog::RollFileSink>("./logfile/logfile.log",
+    /*Glb->BuildLoggerName("synclogger");
+    Glb->BuildLoggerType(xqlog::LoggerType::SYNCLOGGER);*/
+    Glb->BuildLoggerSink<xqlog::FileSink>("./logfile/FileSink.log");
+    Glb->BuildLoggerSink<xqlog::RollFileSink>("./logfile/RollFile_log",
                                               1024 * 1024);
     Glb->Build();//建造完成后，日志器已经建造，有LoggerManger类成员管理诸多日志器
     test();

@@ -47,12 +47,10 @@ namespace xqlog
                 if (pathname.empty())
                     perror("文件所给路径为空：");
                 // 文件不存在再创建
-                if (!Exists(pathname))
-                {
+                if (!Exists(pathname)){
                     size_t pos, index = 0;
                     size_t size = pathname.size();
-                    while (index < size)
-                    {
+                    while (index < size){
                         pos = pathname.find_first_of("/\\", index);
                         if (pos == std::string::npos)
                         {

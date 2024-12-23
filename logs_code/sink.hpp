@@ -8,102 +8,159 @@
 #include <cassert>
 #include <fstream>
 #include <memory>
-
+#include <unistd.h>
 #include "util.hpp"
 
-namespace xqlog {
-
-class LogSink {
-   public:
-    using ptr = std::shared_ptr<LogSink>;
-    virtual ~LogSink() {}
-    virtual void Sink(const char* data, size_t len) = 0;  // 用于落地具体方法
-};
-
-class StdoutSink : public LogSink {
-   public:
-    using ptr = std::shared_ptr<StdoutSink>;
-    void Sink(const char* data, size_t len) override { cout.write(data, len); }
-};
-class FileSink : public LogSink {
-   public:
-    using ptr = std::shared_ptr<FileSink>;
-    FileSink(const std::string& filename) : filename_(filename) {
-        // 创建所给目录
-        Util::File::CreateDirectory(Util::File::Path(filename));
-        // 打开文件
-        ofs_.open(filename.c_str(), std::ios::binary | std::ios::app);
-        assert(ofs_.is_open());
-    }
-    void Sink(const char* data, size_t len) override {
-        // 对文件进行写入
-        assert(ofs_.good());
-        ofs_.write(data, len);
-    }
-
-   private:
-    std::string filename_;
-    std::ofstream ofs_;
-};
-
-class RollFileSink : public LogSink {
-   public:
-    using ptr = std::shared_ptr<RollFileSink>;
-    RollFileSink(const std::string& filename, size_t max_size)
-        : max_size_(max_size), basename_(filename) {
-        Util::File::CreateDirectory(Util::File::Path(filename));
-    }
-
-    void Sink(const char* data, size_t len) override {
-        // 确认文件大小不满足滚动需求，并确保文件已经被打开且与文件流关联
-        InitLogFile();
-        // 向文件写入内容
-        ofs_.good();
-        ofs_.write(data, len);
-        cur_size_ += len;
-    }
-
-   private:
-    void InitLogFile() {
-        if (ofs_.is_open() == false || cur_size_ >= max_size_) {
-            ofs_.close();  // 就算文件没有打开使用close也是安全的
-            std::string filename = CreateFilename();
-            ofs_.open(filename, std::ios::binary | std::ios::app);
-            assert(ofs_.is_open());
-            cur_size_ = 0;
+namespace xqlog
+{
+    class LogSink
+    {
+    public:
+        using ptr = std::shared_ptr<LogSink>;
+        LogSink(){
+            std::string content;
+            xqlog::Util::File file;
+            if (file.GetContent(&content, "../logs_code/config.conf") == false){
+                perror("open config.conf failed");
+            }
+            Json::Value root;
+            xqlog::Util::JsonUtil::UnSerialize(content, &root); // 反序列化，把内容转成jaon value格式
+            flush_log_ = root["flush_log"].asInt();
         }
-    }
+        virtual ~LogSink() {}
+        virtual void Sink(const char *data, size_t len) = 0; // 用于落地具体方法
+    protected:
+        size_t flush_log_;
+    };
 
-    // 构建落地的滚动日志文件名称
-    std::string CreateFilename() {
-        time_t time_ = Util::Date::Now();
-        struct tm t;
-        localtime_r(&time_, &t);
-        std::string filename = basename_;
-        filename += std::to_string(t.tm_year + 1900);
-        filename += std::to_string(t.tm_mon + 1);
-        filename += std::to_string(t.tm_mday);
-        filename += std::to_string(t.tm_hour + 1);
-        filename += std::to_string(t.tm_min + 1);
-        filename += std::to_string(t.tm_sec + 1) + '-' +
-                    std::to_string(cnt_++) + ".log";
-        return filename;
-    }
+    class StdoutSink : public LogSink
+    {
+    public:
+        using ptr = std::shared_ptr<StdoutSink>;
+        void Sink(const char *data, size_t len) override{
+            cout.write(data, len);
+        }
+    };
+    class FileSink : public LogSink
+    {
+    public:
+        using ptr = std::shared_ptr<FileSink>;
+        FileSink(const std::string &filename) : filename_(filename)
+        {
+            // 创建所给目录
+            Util::File::CreateDirectory(Util::File::Path(filename));
+            // 打开文件
+            fs_ = fopen(filename.c_str(), "ab");
+            if(fs_==NULL){
+                std::cout <<__FILE__<<__LINE__<<"open log file failed"<< std::endl;
+                perror(NULL);
+            }
+        }
+        void Sink(const char *data, size_t len) override{
+            fwrite(data,1,len,fs_);
+            if(ferror(fs_)){
+                std::cout <<__FILE__<<__LINE__<<"write log file failed"<< std::endl;
+                perror(NULL);
+            }
+            if(flush_log_ == 1){
+                if(fflush(fs_)==EOF){
+                    std::cout <<__FILE__<<__LINE__<<"fflush file failed"<< std::endl;
+                    perror(NULL);
+                }
+            }else if(flush_log_ == 2){
+                fsync(fileno(fs_));
+            }
+        }
 
-   private:
-    size_t cnt_ = 1;
-    size_t cur_size_ = 0;
-    size_t max_size_;
-    std::string basename_;
-    std::ofstream ofs_;
-};
+    private:
+        std::string filename_;
+        FILE* fs_ = NULL; 
+    };
 
-class LogSinkFactory {
-   public:
-    using ptr = std::shared_ptr<LogSinkFactory>;
-    template <typename SinkType, typename... Args>
-    static std::shared_ptr<LogSink> CreateLog(Args&&... args) {
-        return std::make_shared<SinkType>(std::forward<Args>(args)...);
-    }
-};
-}  // namespace xqlog
+    class RollFileSink : public LogSink
+    {
+    public:
+        using ptr = std::shared_ptr<RollFileSink>;
+        RollFileSink(const std::string &filename, size_t max_size)
+            : max_size_(max_size), basename_(filename)
+        {
+            Util::File::CreateDirectory(Util::File::Path(filename));
+        }
+
+        void Sink(const char *data, size_t len) override
+        {
+            // 确认文件大小不满足滚动需求
+            InitLogFile();
+            // 向文件写入内容
+            fwrite(data, 1, len, fs_);
+            if(ferror(fs_)){
+                std::cout <<__FILE__<<__LINE__<<"write log file failed"<< std::endl;
+                perror(NULL);
+            }
+            cur_size_ += len;
+            if(flush_log_ == 1){
+                if(fflush(fs_)){
+                    std::cout <<__FILE__<<__LINE__<<"fflush file failed"<< std::endl;
+                    perror(NULL);
+                }
+            }else if(flush_log_ == 2){
+                fsync(fileno(fs_));
+            }
+        }
+
+    private:
+        void InitLogFile()
+        {
+            if (fs_==NULL || cur_size_ >= max_size_)
+            {
+                if(fs_!=NULL){
+                    fclose(fs_);
+                    fs_=NULL;
+                }   
+                std::string filename = CreateFilename();
+                fs_=fopen(filename.c_str(), "ab");
+                if(fs_==NULL){
+                    std::cout <<__FILE__<<__LINE__<<"open file failed"<< std::endl;
+                    perror(NULL);
+                }
+                cur_size_ = 0;
+            }
+        }
+
+        // 构建落地的滚动日志文件名称
+        std::string CreateFilename()
+        {
+            time_t time_ = Util::Date::Now();
+            struct tm t;
+            localtime_r(&time_, &t);
+            std::string filename = basename_;
+            filename += std::to_string(t.tm_year + 1900);
+            filename += std::to_string(t.tm_mon + 1);
+            filename += std::to_string(t.tm_mday);
+            filename += std::to_string(t.tm_hour + 1);
+            filename += std::to_string(t.tm_min + 1);
+            filename += std::to_string(t.tm_sec + 1) + '-' +
+                        std::to_string(cnt_++) + ".log";
+            return filename;
+        }
+
+    private:
+        size_t cnt_ = 1;
+        size_t cur_size_ = 0;
+        size_t max_size_;
+        std::string basename_;
+        // std::ofstream ofs_;
+        FILE* fs_ = NULL;
+    };
+
+    class LogSinkFactory
+    {
+    public:
+        using ptr = std::shared_ptr<LogSinkFactory>;
+        template <typename SinkType, typename... Args>
+        static std::shared_ptr<LogSink> CreateLog(Args &&...args)
+        {
+            return std::make_shared<SinkType>(std::forward<Args>(args)...);
+        }
+    };
+} // namespace xqlog
