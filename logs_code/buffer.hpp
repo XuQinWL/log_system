@@ -5,23 +5,12 @@
 #include <vector>
 #include "util.hpp"
 
+extern xqlog::Util::JsonData* g_conf_data;
+
 namespace xqlog{
     class Buffer{
     public:
-        Buffer() : write_pos_(0), read_pos_(0) {
-            std::string content;
-            xqlog::Util::File file;
-            if(file.GetContent(&content,"../logs_code/config.conf")==false){
-                perror("open config.conf failed");
-            }
-            Json::Value root;
-            xqlog::Util::JsonUtil::UnSerialize(content, &root); // 反序列化，把内容转成jaon value格式
-
-            buffer_size_g = root["buffer_size"].asInt64();
-            buffer_.resize(buffer_size_g);//缓冲区基础容量
-            threshold_g = root["threshold"].asInt64();// 倍数扩容阈值
-            linear_growth_g = root["linear_growth"].asInt64();// 线性增长容量
-        }
+        Buffer() : write_pos_(0), read_pos_(0) {}
 
         void Push(const char *data, size_t len)
         {
@@ -75,13 +64,13 @@ namespace xqlog{
             int buffersize = buffer_.size();
             if (len >= WriteableSize())
             {
-                if (buffer_.size() < threshold_g)
+                if (buffer_.size() < g_conf_data->threshold)
                 {
                     buffer_.resize(2 * buffer_.size() + buffersize);
                 }
                 else
                 {
-                    buffer_.resize(linear_growth_g + buffersize);
+                    buffer_.resize(g_conf_data->linear_growth + buffersize);
                 }
             }
         }
@@ -90,8 +79,5 @@ namespace xqlog{
         std::vector<char> buffer_; // 缓冲区
         size_t write_pos_;         // 生产者此时的位置
         size_t read_pos_;          // 消费者此时的位置
-        size_t buffer_size_g;      // 缓冲区基础容量
-        size_t threshold_g;        // 倍数扩容阈值
-        size_t linear_growth_g;    // 线性增长容量
     };
 } // namespace xqlog

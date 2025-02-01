@@ -1,6 +1,4 @@
-/*
-日志器模块
-*/
+//日志器模块
 #pragma once
 #include <atomic>
 #include <cassert>
@@ -14,6 +12,11 @@
 #include "looper.hpp"
 #include "message.hpp"
 #include "sink.hpp"
+#include "backlog/cli_backlog.hpp"
+#include "thread_poll.hpp"
+
+extern ThreadPool* tp;
+ 
 namespace xqlog {
 class Logger {
    public:
@@ -77,7 +80,6 @@ class Logger {
 
         serialize(LogLevel::value::WARN, file, line,
                   ret);  // 3.生成格式化日志信息并落地
-
         free(ret);
         ret = nullptr;
     };
@@ -143,7 +145,11 @@ class Logger {
         // std::cout << "Debug:serialize begin\n";
         LogMessage msg(level, file, line, logger_name_, ret);
         std::string data = formatter_->format(msg);
-
+        if(level==LogLevel::value::FATAL||
+           level==LogLevel::value::ERROR){
+            auto ret = tp->enqueue(start_backup,data);
+            ret.get();
+        }
         // std::cout << "Debug:serialize Sink\n";
         Sink(data.c_str(), data.size());
     }

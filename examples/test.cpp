@@ -1,28 +1,46 @@
 #include "../logs_code/xqlog.hpp"
-
+#include "../logs_code/thread_poll.hpp"
+#include "../logs_code/util.hpp"
 using std::cout;
 using std::endl;
 
+ThreadPool* tp=nullptr;
+xqlog::Util::JsonData* g_conf_data;
 void test() {
     int cur_size = 1;
     int cnt = 5;
-    while (cur_size++ < 100) {
-        xqlog::GetLogger("asynclogger")->Fatal("测试日志-%d", cnt++);
+    while (cur_size++ < 10) {
+        xqlog::GetLogger("synclogger")->Info("测试日志-%d", cnt++);
+        xqlog::GetLogger("synclogger")->Warn("测试日志-%d", cnt++);
+        xqlog::GetLogger("synclogger")->Debug("测试日志-%d", cnt++);
+        xqlog::GetLogger("synclogger")->Error("测试日志-%d", cnt++);
+        xqlog::GetLogger("synclogger")->Fatal("测试日志-%d", cnt++);
+        // xqlog::GetLogger("asynclogger")->Info("测试日志-%d", cnt++);
+        // xqlog::GetLogger("asynclogger")->Warn("测试日志-%d", cnt++);
+        // xqlog::GetLogger("asynclogger")->Debug("测试日志-%d", cnt++);
+        // xqlog::GetLogger("asynclogger")->Error("测试日志-%d", cnt++);
+        // xqlog::GetLogger("asynclogger")->Fatal("测试日志-%d", cnt++);
     }
 }
+
+void init_thread_pool() {
+    tp = new ThreadPool(g_conf_data->thread_count);
+}
 int main() {
+    g_conf_data = xqlog::Util::JsonData::GetJsonData();
+    init_thread_pool();
     std::shared_ptr<xqlog::LoggerBuilder> Glb(new xqlog::GlobalLoggerBuilder());
     Glb->BuildLoggerFormatter("[%c][%p][%f-%l]%T%m%n");
-    Glb->BuildLoggerName("asynclogger");
-    Glb->BuildLoggerType(xqlog::LoggerType::ASYNCLOGGER);
-    /*Glb->BuildLoggerName("synclogger");
-    Glb->BuildLoggerType(xqlog::LoggerType::SYNCLOGGER);*/
+    // Glb->BuildLoggerName("asynclogger");
+    // Glb->BuildLoggerType(xqlog::LoggerType::ASYNCLOGGER);
+    Glb->BuildLoggerName("synclogger");
+    Glb->BuildLoggerType(xqlog::LoggerType::SYNCLOGGER);
     Glb->BuildLoggerSink<xqlog::FileSink>("./logfile/FileSink.log");
     Glb->BuildLoggerSink<xqlog::RollFileSink>("./logfile/RollFile_log",
                                               1024 * 1024);
     Glb->Build();//建造完成后，日志器已经建造，有LoggerManger类成员管理诸多日志器
     test();
-
+    // tp->shutdown();
     return 0;
 }
 

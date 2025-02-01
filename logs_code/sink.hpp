@@ -11,26 +11,16 @@
 #include <unistd.h>
 #include "util.hpp"
 
+extern xqlog::Util::JsonData* g_conf_data;
+
 namespace xqlog
 {
     class LogSink
     {
     public:
         using ptr = std::shared_ptr<LogSink>;
-        LogSink(){
-            std::string content;
-            xqlog::Util::File file;
-            if (file.GetContent(&content, "../logs_code/config.conf") == false){
-                perror("open config.conf failed");
-            }
-            Json::Value root;
-            xqlog::Util::JsonUtil::UnSerialize(content, &root); // 反序列化，把内容转成jaon value格式
-            flush_log_ = root["flush_log"].asInt();
-        }
         virtual ~LogSink() {}
         virtual void Sink(const char *data, size_t len) = 0; // 用于落地具体方法
-    protected:
-        size_t flush_log_;
     };
 
     class StdoutSink : public LogSink
@@ -62,12 +52,12 @@ namespace xqlog
                 std::cout <<__FILE__<<__LINE__<<"write log file failed"<< std::endl;
                 perror(NULL);
             }
-            if(flush_log_ == 1){
+            if(g_conf_data->flush_log == 1){
                 if(fflush(fs_)==EOF){
                     std::cout <<__FILE__<<__LINE__<<"fflush file failed"<< std::endl;
                     perror(NULL);
                 }
-            }else if(flush_log_ == 2){
+            }else if(g_conf_data->flush_log == 2){
                 fsync(fileno(fs_));
             }
         }
@@ -98,12 +88,12 @@ namespace xqlog
                 perror(NULL);
             }
             cur_size_ += len;
-            if(flush_log_ == 1){
+            if(g_conf_data->flush_log == 1){
                 if(fflush(fs_)){
                     std::cout <<__FILE__<<__LINE__<<"fflush file failed"<< std::endl;
                     perror(NULL);
                 }
-            }else if(flush_log_ == 2){
+            }else if(g_conf_data->flush_log == 2){
                 fsync(fileno(fs_));
             }
         }
